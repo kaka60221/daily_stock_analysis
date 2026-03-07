@@ -1,7 +1,7 @@
 name: 🧪 [测试] 盘中高频推送 (30min x 2次)
 
 on:
-  # 仅允许手动触发，防止意外自动运行
+  # 仅允许手动触发
   workflow_dispatch:
     inputs:
       interval_minutes:
@@ -18,7 +18,7 @@ on:
 jobs:
   test-loop:
     runs-on: ubuntu-latest
-    timeout-minutes: 120 # 给足时间，防止超时
+    timeout-minutes: 120
     
     steps:
       - name: 检出代码
@@ -36,15 +36,16 @@ jobs:
       
       - name: 🔄 执行循环测试
         env:
+          # --- 基础配置 ---
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
           
-          # ⭐ 测试专用配置
-          REPORT_TYPE: 'simple'           # 必须精简
-          MARKET_REVIEW_ENABLED: 'false'  # 不看大盘
-          FORCE_RUN: 'true'               # ⭐ 强制跳过交易日检查
-          TRADING_DAY_CHECK_ENABLED: 'false' # 关闭内部检查双重保险
+          # --- 核心逻辑配置 (通过环境变量控制) ---
+          REPORT_TYPE: 'simple'                # 设置为精简模式
+          MARKET_REVIEW_ENABLED: 'false'       # 关闭大盘复盘
+          FORCE_RUN: 'true'                    # 强制运行 (忽略节假日检查)
+          TRADING_DAY_CHECK_ENABLED: 'false'   # 双重保险：关闭内部交易日检查
           
         run: |
           INTERVAL=${{ github.event.inputs.interval_minutes || 30 }}
@@ -65,15 +66,13 @@ jobs:
             # 如果不是第一次，先等待
             if [ $i -gt 1 ]; then
               echo "💤 等待 $INTERVAL 分钟..."
-              # 将分钟转换为秒
               SLEEP_SECONDS=$((INTERVAL * 60))
               sleep $SLEEP_SECONDS
             fi
             
-            # 执行分析脚本
-            # 注意：这里假设你的 main.py 支持 --force-run 参数
-            # 如果不支持，依靠上面的环境变量 FORCE_RUN=true 也能生效
-            python main.py --no-market-review --report-type simple --force-run
+            # ✅ 修复：去掉了不支持的 --report-type 参数
+            # 只保留 main.py 支持的参数：--no-market-review 和 --force-run
+            python main.py --no-market-review --force-run
             
             echo "✅ 第 $i 次运行完成"
             echo ""
