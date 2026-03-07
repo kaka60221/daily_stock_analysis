@@ -1,0 +1,82 @@
+name: 🧪 [测试] 盘中高频推送 (30min x 2次)
+
+on:
+  # 仅允许手动触发，防止意外自动运行
+  workflow_dispatch:
+    inputs:
+      interval_minutes:
+        description: '每次发送间隔 (分钟)'
+        required: true
+        default: '30'
+        type: number
+      run_count:
+        description: '总共运行几次'
+        required: true
+        default: '2'
+        type: number
+
+jobs:
+  test-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120 # 给足时间，防止超时
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+      
+      - name: 🔄 执行循环测试
+        env:
+          STOCK_LIST: ${{ secrets.STOCK_LIST }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          
+          # ⭐ 测试专用配置
+          REPORT_TYPE: 'simple'           # 必须精简
+          MARKET_REVIEW_ENABLED: 'false'  # 不看大盘
+          FORCE_RUN: 'true'               # ⭐ 强制跳过交易日检查
+          TRADING_DAY_CHECK_ENABLED: 'false' # 关闭内部检查双重保险
+          
+        run: |
+          INTERVAL=${{ github.event.inputs.interval_minutes || 30 }}
+          COUNT=${{ github.event.inputs.run_count || 2 }}
+          
+          echo "🧪 开始测试..."
+          echo "⏱️ 间隔: $INTERVAL 分钟"
+          echo "🔢 次数: $COUNT 次"
+          echo "⚠️  模式: 强制运行 (忽略节假日)"
+          echo ""
+          
+          for i in $(seq 1 $COUNT); do
+            echo "=========================================="
+            echo "🚀 第 $i / $COUNT 次运行开始"
+            echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+            echo "=========================================="
+            
+            # 如果不是第一次，先等待
+            if [ $i -gt 1 ]; then
+              echo "💤 等待 $INTERVAL 分钟..."
+              # 将分钟转换为秒
+              SLEEP_SECONDS=$((INTERVAL * 60))
+              sleep $SLEEP_SECONDS
+            fi
+            
+            # 执行分析脚本
+            # 注意：这里假设你的 main.py 支持 --force-run 参数
+            # 如果不支持，依靠上面的环境变量 FORCE_RUN=true 也能生效
+            python main.py --no-market-review --report-type simple --force-run
+            
+            echo "✅ 第 $i 次运行完成"
+            echo ""
+          done
+          
+          echo "🎉 所有测试任务完成！"
